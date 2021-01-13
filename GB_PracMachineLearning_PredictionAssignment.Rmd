@@ -1,0 +1,116 @@
+---
+title: "Practical Machine Learning - Prediction Assignment Write Up"
+author: "Genevieve Beart"
+date: "13 January 2020"
+geometry: "left=2cm,right=2cm,top=2cm,bottom=2cm"
+output: html_document
+fontsize: 8pt
+theme: cerulean
+---
+## Executive Summary
+In this project, we look at dumbbell bicep curl data from various senors to try to the predict different ways the curls were undertaken. Using a training data set, we built an algorithm to predict the way the exercise was undertaken. A random forest algorithm was applied as it is generally suitable when you have a large number of variable, is not overally influenced by outliers and selects the most important variables to use. To cross validate the algorithm, we applied this model a partitioned component of the data set to test the accuracy, highlighting the algorithm was 99.66% accurate. Finally, we applied the identified algorithm to the testing data set. 
+
+## Data Preparation 
+
+We start by initiating relevant packages, loading and reviewing the training and testing dataset:- 
+
+```{r echo=TRUE}
+library(knitr)
+library(caret)
+library(randomForest)
+library(e1071)
+library(rpart)
+library(rpart.plot)
+##load the training dataset and identify NAs:
+training <- read.csv("pml-training.csv", header = TRUE,sep = ",",na.strings = c("#DIV/0!","NA", ""))  
+ ##load the testing dataset and identify NAs:
+testing <- read.csv("pml-testing.csv", header = TRUE,sep = ",",na.strings = c("#DIV/0!","NA", "")) 
+
+#Review the training data:
+dim(training)
+table(training$classe)
+#Reviewing the testing data:
+dim(testing)
+```
+
+In this data set, we can see that we have 19622 observations of 160 variables. In this assignment we want to use a combination of these variables to predict the manner in which each exercise was undertaken, i.e., the **classe** variable. In contrast, the testing data set has only 20 observations with 160 variables. The aim is to use the testing data set to build and validate a model that can project the **classe** of the 20 observations in the testing data set. 
+
+**classe** may equal A, B, C, D or E. Based on the notes from the Human Activity Webpage, these factors correspond to different ways the dumbbell bicep curls were undertaken:
+* A = exactly according to the specification;
+* B = throwing the elbows to the front; 
+* C = lifting the dumbbell only halfway;
+* D = lowering the dumbbell only halfway; and
+* E = throwing the hips to the front.
+
+As shown by the table above, we have several thousand observations for each of the five **classe** options in the testing set. 
+
+Before building a predictive model, we can drop data which does not help the predicition (i.e., the first seven columns) and remove columns which only include NAs - we will do this on both data sets:
+
+```{r echo=TRUE}
+## Clean the testing and training data
+# Remove first 7 columns
+training1<-training[,-c(1,2,3,4,5,6,7)]
+testing1<-testing[,-c(1,2,3,4,5,6,7)]
+#Remove columns with only NAs
+training2<-training1[,colSums(is.na(training1)) == 0]
+testing2<-testing1[,colSums(is.na(testing1)) == 0]
+#Resummarise the number of dimensions in each data set:
+dim(training2)
+dim(testing2)
+```
+
+As can be seen, this cleaning has reduced the number of variables from 160 to 53 in both data sets while maintaining all of the  observations. 
+
+In order to build and test potential models, we start with the training data **training2** and separate this data into a training and validation data set. We will use 70% of the data to train the algorithm and the remaining 30% to test it. This remaining 30% of the data is what will be used as cross-validation of the identified algorithm. 
+
+```{r echo=TRUE}
+## Split the data into a training and validation data set
+set.seed(1973) #set the seed so analysis can be replicated
+training3 <- createDataPartition(training2$classe, p=0.7, list=FALSE)
+train_data <- training2[training3,] ## the final training data set to be used
+val_data <- training2[-training3,] ## the final validation data set to be used for cross-validation
+```
+
+## Model Training
+We will use a **random forest** algorithm to fit a model to the test data. The random forest algorithm has been selected as it is generally suitable when you have a large number of variables (53 in our case), is not overally influenced by outliers and selects the most important variables to use.    
+
+```{r echo=TRUE}
+## Apply random forest algorithm to the partitioned training data set
+training_modelRF <- randomForest(classe~., data=train_data)
+training_modelRF
+```
+
+As can be seen from the output of fitting this model against the test dat, there is an estimated out of sample (OOS) error rate of 0.58% using the testing data set. 
+
+The decision tree of the random forest model used is shown in appendix **A.1 - Decision Tree Visualisation**.  
+
+## Model Cross-Validation
+We can now cross-validate this model using the split validation data set **val_data**. We apply the algorithm to **val_data** and view the  results:
+```{r echo=TRUE}
+## Apply algorithm to the partitioned validation data set
+val_output <- predict(training_modelRF, newdata=val_data)
+confusionMatrix(val_data$classe, val_output)
+```
+
+As can be seen from the outputs above, the accuracy of this algorithm on the validation data set if 99.66%. 
+
+## Run the Model on the Test Data
+Finally, we need to run the algorithm on the test data so we can get the outputs for the quiz. 
+
+```{r echo=TRUE}
+## Apply algorithm to the test data set
+test_output <- predict(training_modelRF, newdata=testing2)
+test_output
+```
+
+
+\newpage
+
+## Appendix
+
+### A.1 - Decision Tree Visualisation
+
+```{r echo=TRUE}
+tree_output <- rpart(classe ~ ., data=train_data, method="class")
+prp(tree_output) #Plot the decision tree
+```
